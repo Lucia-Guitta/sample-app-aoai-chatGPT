@@ -13,11 +13,12 @@ from quart import (
     request,
     send_from_directory,
     render_template,
+    abort,
 )
 
 from openai import AsyncAzureOpenAI
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
-from backend.auth.auth_utils import get_authenticated_user_details
+from backend.auth.auth_utils import get_authenticated_user_details, get_authenticated_user_details_jwt
 from backend.history.cosmosdbservice import CosmosConversationClient
 
 from backend.utils import (
@@ -878,7 +879,66 @@ async def conversation_internal(request_body):
         else:
             return jsonify({"error": str(ex)}), 500
 
+import jwt
+import string
+import secrets
+import datetime
 
+def generate_secret_key(length=64):
+    """Generate a cryptographically secure secret key."""
+    characters = string.ascii_letters + string.digits + string.punctuation
+    secure_key = ''.join(secrets.choice(characters) for i in range(length))
+    with open('secret_key.txt', 'w') as f:
+        f.write(secure_key)
+    return secure_key
+
+# Function to create a JWT
+def create_jwt(user_id="071095", user_name="Lu", secret_key=None, expiration_minutes=None):
+    """
+    Create a JWT with given user details and expiration.
+
+    Args:
+    user_id (str): User's unique identifier.
+    user_name (str): Name of the user.
+    secret_key (str): The secret key to sign the JWT.
+    expiration_minutes (int, optional): The number of minutes until the token expires.
+
+    Returns:
+    str: Encoded JWT.
+    """
+    payload = {
+        'sub': user_id,
+        'name': user_name,
+        'iat': datetime.datetime.utcnow(),  # Issued At: Time when the JWT was issued.
+    }
+
+    # Add an expiration time if specified
+    if expiration_minutes:
+        payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
+    
+    secret_key = generate_secret_key()
+
+    encoded_jwt = jwt.encode(payload, secret_key, algorithm="HS256")
+    return encoded_jwt
+
+@bp.route("/create_token", methods=["POST"])
+async def create_token():
+    # Generate the JWT
+    jwt_encoded = create_jwt()
+    # Devolver el token en una respuesta JSON
+    return jsonify({"token": jwt_encoded.decode('utf-8')})
+
+@bp.route("/auth_details", methods=["POST"])
+async def auth_details():
+    # JWT authentication
+    authenticated_user = get_authenticated_user_details_jwt(request_headers=request.headers)
+    if "status" in authenticated_user and authenticated_user["status"] == "error":
+        # Si hay un error en la autenticación, retorna un mensaje de error
+        abort(401, description=authenticated_user["message"])
+    return jsonify(authenticated_user)
+
+
+### This is the method called when the user sends a message ###
 @bp.route("/conversation", methods=["POST"])
 async def conversation():
     if not request.is_json:
