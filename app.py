@@ -926,7 +926,7 @@ async def create_token():
     # Generate the JWT
     jwt_encoded = create_jwt()
     # Devolver el token en una respuesta JSON
-    return jsonify({"token": jwt_encoded.decode('utf-8')})
+    return jsonify({"token": jwt_encoded})
 
 @bp.route("/auth_details", methods=["POST"])
 async def auth_details():

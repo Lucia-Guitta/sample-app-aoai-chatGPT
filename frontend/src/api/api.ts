@@ -16,55 +16,55 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
     return response;
 }
 
+// export async function getUserInfo(): Promise<UserInfo[]> {
+//     const response = await fetch('/.auth/me');
+//     if (!response.ok) {
+//         console.log("No identity provider found. Access to chat will be blocked.")
+//         return [];
+//     }
+
+//     const payload = await response.json();
+//     return payload;
+// }
+
 export async function getUserInfo(): Promise<UserInfo[]> {
-    const response = await fetch('/.auth/me');
-    if (!response.ok) {
-        console.log("No identity provider found. Access to chat will be blocked.")
+    // Llamada para obtener el token
+    const tokenResponse = await fetch('/create_token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!tokenResponse.ok) {
+        console.error("Failed to fetch the token.");
+        return [];
+    }
+    
+    const tokenData = await tokenResponse.json();
+    const token = tokenData.token; // Asume que el token se devuelve en un campo llamado 'token'
+    if (!token) {
+        console.error("Token not received from the server.");
         return [];
     }
 
-    const payload = await response.json();
-    return payload;
+    // Llamada para verificar el token y obtener detalles del usuario
+    const userResponse = await fetch('/auth_details', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!userResponse.ok) {
+        console.error("Failed to verify the token or fetch user info.");
+        return [];
+    }
+
+    const userInfo = await userResponse.json();
+    return userInfo;
 }
-
-// export async function getUserInfo(): Promise<UserInfo[]> {
-//     // Llamada para obtener el token
-//     const tokenResponse = await fetch('/create_token', {
-//         method: 'POST',
-//         headers: {
-//             'Content-Type': 'application/json'
-//         }
-//     });
-
-//     if (!tokenResponse.ok) {
-//         console.error("Failed to fetch the token.");
-//         return [];
-//     }
-    
-//     const tokenData = await tokenResponse.json();
-//     const token = tokenData.token; // Asume que el token se devuelve en un campo llamado 'token'
-//     if (!token) {
-//         console.error("Token not received from the server.");
-//         return [];
-//     }
-
-//     // Llamada para verificar el token y obtener detalles del usuario
-//     const userResponse = await fetch('/auth_details', {
-//         method: 'POST',
-//         headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json'
-//         }
-//     });
-
-//     if (!userResponse.ok) {
-//         console.error("Failed to verify the token or fetch user info.");
-//         return [];
-//     }
-
-//     const userInfo = await userResponse.json();
-//     return userInfo;
-// }
 
 // export const fetchChatHistoryInit = async (): Promise<Conversation[] | null> => {
 export const fetchChatHistoryInit = (): Conversation[] | null => {
