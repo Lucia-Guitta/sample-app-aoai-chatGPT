@@ -8,7 +8,9 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            messages: options.messages
+            messages: options.messages,
+            conversationId: options.conversation_id,
+            userId: options.user_id
         }),
         signal: abortSignal
     });
@@ -61,9 +63,19 @@ export async function getUserInfo(): Promise<UserInfo[]> {
         console.error("Failed to verify the token or fetch user info.");
         return [];
     }
-
-    const userInfo = await userResponse.json();
-    return userInfo;
+    // const userInfo = await userResponse.json();
+    const uid = await userResponse.json();
+    const uinfoarray: UserInfo[] = [
+        {
+            access_token: token,
+            expires_on: "2024-04-30",
+            id_token: "sample_id_token_1",
+            provider_name: "Sample Provider 1",
+            user_claims: [{ claim1: "value1" }, { claim2: "value2" }],
+            user_id: uid.user_id
+        }
+    ]
+    return uinfoarray;
 }
 
 // export const fetchChatHistoryInit = async (): Promise<Conversation[] | null> => {

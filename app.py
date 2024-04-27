@@ -20,6 +20,7 @@ from openai import AsyncAzureOpenAI
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from backend.auth.auth_utils import get_authenticated_user_details, get_authenticated_user_details_jwt
 from backend.history.cosmosdbservice import CosmosConversationClient
+from getIntent import findDocRef
 
 from backend.utils import (
     format_as_ndjson,
@@ -859,7 +860,7 @@ async def stream_chat_request(request_body):
 
     return generate()
 
-
+non_domain_questions = dict()
 async def conversation_internal(request_body):
     try:
         if SHOULD_STREAM:
@@ -870,7 +871,16 @@ async def conversation_internal(request_body):
             return response
         else:
             result = await complete_chat_request(request_body)
-            return jsonify(result)
+            global non_domain_questions
+            if request_body["userId"] not in non_domain_questions.keys():
+                non_domain_questions[request_body["userId"]] = 0
+            non_domain_questions[request_body["userId"]] = findDocRef(result["choices"][-1]["messages"][-1]["content"],
+                                                                      non_domain_questions[request_body["userId"]]
+                                                                      )
+            if non_domain_questions[request_body["userId"]] >= 5:
+                result["choices"][-1]["messages"][-1]["content"] = "Por favor, pregunta algo relacionado con el sistema de Prop360"
+            answer = jsonify(result)
+            return answer
 
     except Exception as ex:
         logging.exception(ex)
@@ -928,10 +938,14 @@ async def create_token():
     # Devolver el token en una respuesta JSON
     return jsonify({"token": jwt_encoded})
 
+user_count = 0
 @bp.route("/auth_details", methods=["POST"])
 async def auth_details():
     # JWT authentication
+    global user_count
+    user_count +=1
     authenticated_user = get_authenticated_user_details_jwt(request_headers=request.headers)
+    authenticated_user["user_id"] = str(int(authenticated_user["user_id"])+user_count)
     if "status" in authenticated_user and authenticated_user["status"] == "error":
         # Si hay un error en la autenticación, retorna un mensaje de error
         abort(401, description=authenticated_user["message"])

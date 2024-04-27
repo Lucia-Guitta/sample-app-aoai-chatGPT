@@ -41,6 +41,15 @@ const enum messageStatus {
     Done = "Done"
 }
 
+type UserInfo = {
+    access_token: string;
+    expires_on: string;
+    id_token: string;
+    provider_name: string;
+    user_claims: any[];
+    user_id: string;
+};
+
 const Chat = () => {
     const appStateContext = useContext(AppStateContext)
     const ui = appStateContext?.state.frontendSettings?.ui;
@@ -57,7 +66,7 @@ const Chat = () => {
     const [clearingChat, setClearingChat] = useState<boolean>(false);
     const [hideErrorDialog, { toggle: toggleErrorDialog }] = useBoolean(true);
     const [errorMsg, setErrorMsg] = useState<ErrorMessage | null>()
-
+    const [userInfo, setUserInfo] = useState<String>('');
     const errorDialogContentProps = {
         type: DialogType.close,
         title: errorMsg?.title,
@@ -112,6 +121,7 @@ const Chat = () => {
         else {
             setShowAuthMessage(false);
         }
+        setUserInfo(userInfoList[userInfoList.length - 1].user_id)
     }
 
     let assistantMessage = {} as ChatMessage
@@ -185,7 +195,9 @@ const Chat = () => {
         setMessages(conversation.messages)
 
         const request: ConversationRequest = {
-            messages: [...conversation.messages.filter((answer) => answer.role !== ERROR)]
+            messages: [...conversation.messages.filter((answer) => answer.role !== ERROR)],
+            conversation_id: conversation.id,
+            user_id: userInfo
         };
 
         let result = {} as ChatResponse;
@@ -271,230 +283,230 @@ const Chat = () => {
         return abortController.abort();
     };
 
-    const makeApiRequestWithCosmosDB = async (question: string, conversationId?: string) => {
-        setIsLoading(true);
-        setShowLoadingMessage(true);
-        const abortController = new AbortController();
-        abortFuncs.current.unshift(abortController);
+    // const makeApiRequestWithCosmosDB = async (question: string, conversationId?: string) => {
+    //     setIsLoading(true);
+    //     setShowLoadingMessage(true);
+    //     const abortController = new AbortController();
+    //     abortFuncs.current.unshift(abortController);
 
-        const userMessage: ChatMessage = {
-            id: uuid(),
-            role: "user",
-            content: question,
-            date: new Date().toISOString(),
-        };
+    //     const userMessage: ChatMessage = {
+    //         id: uuid(),
+    //         role: "user",
+    //         content: question,
+    //         date: new Date().toISOString(),
+    //     };
 
-        //api call params set here (generate)
-        let request: ConversationRequest;
-        let conversation;
-        if (conversationId) {
-            conversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
-            if (!conversation) {
-                console.error("Conversation not found.");
-                setIsLoading(false);
-                setShowLoadingMessage(false);
-                abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                return;
-            } else {
-                conversation.messages.push(userMessage);
-                request = {
-                    messages: [...conversation.messages.filter((answer) => answer.role !== ERROR)]
-                };
-            }
-        } else {
-            request = {
-                messages: [userMessage].filter((answer) => answer.role !== ERROR)
-            };
-            setMessages(request.messages)
-        }
-        let result = {} as ChatResponse;
-        try {
-            const response = conversationId ? await historyGenerate(request, abortController.signal, conversationId) : await historyGenerate(request, abortController.signal);
-            if (!response?.ok) {
-                const responseJson = await response.json();
-                var errorResponseMessage = responseJson.error === undefined ? "Please try again. If the problem persists, please contact the site administrator." : responseJson.error;
-                let errorChatMsg: ChatMessage = {
-                    id: uuid(),
-                    role: ERROR,
-                    content: `There was an error generating a response. Chat history can't be saved at this time. ${errorResponseMessage}`,
-                    date: new Date().toISOString()
-                }
-                let resultConversation;
-                if (conversationId) {
-                    resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
-                    if (!resultConversation) {
-                        console.error("Conversation not found.");
-                        setIsLoading(false);
-                        setShowLoadingMessage(false);
-                        abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                        return;
-                    }
-                    resultConversation.messages.push(errorChatMsg);
-                } else {
-                    setMessages([...messages, userMessage, errorChatMsg])
-                    setIsLoading(false);
-                    setShowLoadingMessage(false);
-                    abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                    return;
-                }
-                appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
-                setMessages([...resultConversation.messages]);
-                return;
-            }
-            if (response?.body) {
-                const reader = response.body.getReader();
+    //     //api call params set here (generate)
+    //     let request: ConversationRequest;
+    //     let conversation;
+    //     if (conversationId) {
+    //         conversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
+    //         if (!conversation) {
+    //             console.error("Conversation not found.");
+    //             setIsLoading(false);
+    //             setShowLoadingMessage(false);
+    //             abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //             return;
+    //         } else {
+    //             conversation.messages.push(userMessage);
+    //             request = {
+    //                 messages: [...conversation.messages.filter((answer) => answer.role !== ERROR)]
+    //             };
+    //         }
+    //     } else {
+    //         request = {
+    //             messages: [userMessage].filter((answer) => answer.role !== ERROR)
+    //         };
+    //         setMessages(request.messages)
+    //     }
+    //     let result = {} as ChatResponse;
+    //     try {
+    //         const response = conversationId ? await historyGenerate(request, abortController.signal, conversationId) : await historyGenerate(request, abortController.signal);
+    //         if (!response?.ok) {
+    //             const responseJson = await response.json();
+    //             var errorResponseMessage = responseJson.error === undefined ? "Please try again. If the problem persists, please contact the site administrator." : responseJson.error;
+    //             let errorChatMsg: ChatMessage = {
+    //                 id: uuid(),
+    //                 role: ERROR,
+    //                 content: `There was an error generating a response. Chat history can't be saved at this time. ${errorResponseMessage}`,
+    //                 date: new Date().toISOString()
+    //             }
+    //             let resultConversation;
+    //             if (conversationId) {
+    //                 resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
+    //                 if (!resultConversation) {
+    //                     console.error("Conversation not found.");
+    //                     setIsLoading(false);
+    //                     setShowLoadingMessage(false);
+    //                     abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                     return;
+    //                 }
+    //                 resultConversation.messages.push(errorChatMsg);
+    //             } else {
+    //                 setMessages([...messages, userMessage, errorChatMsg])
+    //                 setIsLoading(false);
+    //                 setShowLoadingMessage(false);
+    //                 abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                 return;
+    //             }
+    //             appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
+    //             setMessages([...resultConversation.messages]);
+    //             return;
+    //         }
+    //         if (response?.body) {
+    //             const reader = response.body.getReader();
 
-                let runningText = "";
-                while (true) {
-                    setProcessMessages(messageStatus.Processing)
-                    const { done, value } = await reader.read();
-                    if (done) break;
+    //             let runningText = "";
+    //             while (true) {
+    //                 setProcessMessages(messageStatus.Processing)
+    //                 const { done, value } = await reader.read();
+    //                 if (done) break;
 
-                    var text = new TextDecoder("utf-8").decode(value);
-                    const objects = text.split("\n");
-                    objects.forEach((obj) => {
-                        try {
-                            if (obj !== "" && obj !== "{}") {
-                                runningText += obj;
-                                result = JSON.parse(runningText);
-                                if (!result.choices?.[0]?.messages?.[0].content) {
-                                    errorResponseMessage = NO_CONTENT_ERROR;
-                                    throw Error();
-                                }
-                                if (result.choices?.length > 0) {
-                                    result.choices[0].messages.forEach((msg) => {
-                                        msg.id = result.id;
-                                        msg.date = new Date().toISOString();
-                                    })
-                                    if (result.choices[0].messages?.some(m => m.role === ASSISTANT)) {
-                                        setShowLoadingMessage(false);
-                                    }
-                                    result.choices[0].messages.forEach((resultObj) => {
-                                        processResultMessage(resultObj, userMessage, conversationId);
-                                    })
-                                }
-                                runningText = "";
-                            }
-                            else if (result.error) {
-                                throw Error(result.error);
-                            }
-                        }
-                        catch (e) {
-                            if (!(e instanceof SyntaxError)) {
-                                console.error(e);
-                                throw e;
-                            } else {
-                                console.log("Incomplete message. Continuing...")
-                            }
-                         }
-                    });
-                }
+    //                 var text = new TextDecoder("utf-8").decode(value);
+    //                 const objects = text.split("\n");
+    //                 objects.forEach((obj) => {
+    //                     try {
+    //                         if (obj !== "" && obj !== "{}") {
+    //                             runningText += obj;
+    //                             result = JSON.parse(runningText);
+    //                             if (!result.choices?.[0]?.messages?.[0].content) {
+    //                                 errorResponseMessage = NO_CONTENT_ERROR;
+    //                                 throw Error();
+    //                             }
+    //                             if (result.choices?.length > 0) {
+    //                                 result.choices[0].messages.forEach((msg) => {
+    //                                     msg.id = result.id;
+    //                                     msg.date = new Date().toISOString();
+    //                                 })
+    //                                 if (result.choices[0].messages?.some(m => m.role === ASSISTANT)) {
+    //                                     setShowLoadingMessage(false);
+    //                                 }
+    //                                 result.choices[0].messages.forEach((resultObj) => {
+    //                                     processResultMessage(resultObj, userMessage, conversationId);
+    //                                 })
+    //                             }
+    //                             runningText = "";
+    //                         }
+    //                         else if (result.error) {
+    //                             throw Error(result.error);
+    //                         }
+    //                     }
+    //                     catch (e) {
+    //                         if (!(e instanceof SyntaxError)) {
+    //                             console.error(e);
+    //                             throw e;
+    //                         } else {
+    //                             console.log("Incomplete message. Continuing...")
+    //                         }
+    //                      }
+    //                 });
+    //             }
 
-                let resultConversation;
-                if (conversationId) {
-                    resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
-                    if (!resultConversation) {
-                        console.error("Conversation not found.");
-                        setIsLoading(false);
-                        setShowLoadingMessage(false);
-                        abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                        return;
-                    }
-                    isEmpty(toolMessage) ?
-                        resultConversation.messages.push(assistantMessage) :
-                        resultConversation.messages.push(toolMessage, assistantMessage)
-                } else {
-                    resultConversation = {
-                        id: result.history_metadata.conversation_id,
-                        title: result.history_metadata.title,
-                        messages: [userMessage],
-                        date: result.history_metadata.date
-                    }
-                    isEmpty(toolMessage) ?
-                        resultConversation.messages.push(assistantMessage) :
-                        resultConversation.messages.push(toolMessage, assistantMessage)
-                }
-                if (!resultConversation) {
-                    setIsLoading(false);
-                    setShowLoadingMessage(false);
-                    abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                    return;
-                }
-                appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
-                isEmpty(toolMessage) ?
-                    setMessages([...messages, assistantMessage]) :
-                    setMessages([...messages, toolMessage, assistantMessage]);
-            }
+    //             let resultConversation;
+    //             if (conversationId) {
+    //                 resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
+    //                 if (!resultConversation) {
+    //                     console.error("Conversation not found.");
+    //                     setIsLoading(false);
+    //                     setShowLoadingMessage(false);
+    //                     abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                     return;
+    //                 }
+    //                 isEmpty(toolMessage) ?
+    //                     resultConversation.messages.push(assistantMessage) :
+    //                     resultConversation.messages.push(toolMessage, assistantMessage)
+    //             } else {
+    //                 resultConversation = {
+    //                     id: result.history_metadata.conversation_id,
+    //                     title: result.history_metadata.title,
+    //                     messages: [userMessage],
+    //                     date: result.history_metadata.date
+    //                 }
+    //                 isEmpty(toolMessage) ?
+    //                     resultConversation.messages.push(assistantMessage) :
+    //                     resultConversation.messages.push(toolMessage, assistantMessage)
+    //             }
+    //             if (!resultConversation) {
+    //                 setIsLoading(false);
+    //                 setShowLoadingMessage(false);
+    //                 abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                 return;
+    //             }
+    //             appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
+    //             isEmpty(toolMessage) ?
+    //                 setMessages([...messages, assistantMessage]) :
+    //                 setMessages([...messages, toolMessage, assistantMessage]);
+    //         }
 
-        } catch (e) {
-            if (!abortController.signal.aborted) {
-                let errorMessage = `An error occurred. ${errorResponseMessage}`;
-                if (result.error?.message) {
-                    errorMessage = result.error.message;
-                }
-                else if (typeof result.error === "string") {
-                    errorMessage = result.error;
-                }
-                let errorChatMsg: ChatMessage = {
-                    id: uuid(),
-                    role: ERROR,
-                    content: errorMessage,
-                    date: new Date().toISOString()
-                }
-                let resultConversation;
-                if (conversationId) {
-                    resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
-                    if (!resultConversation) {
-                        console.error("Conversation not found.");
-                        setIsLoading(false);
-                        setShowLoadingMessage(false);
-                        abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                        return;
-                    }
-                    resultConversation.messages.push(errorChatMsg);
-                } else {
-                    if (!result.history_metadata) {
-                        console.error("Error retrieving data.", result);
-                        let errorChatMsg: ChatMessage = {
-                            id: uuid(),
-                            role: ERROR,
-                            content: errorMessage,
-                            date: new Date().toISOString()
-                        } 
-                        setMessages([...messages, userMessage, errorChatMsg])
-                        setIsLoading(false);
-                        setShowLoadingMessage(false);
-                        abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                        return;
-                    }
-                    resultConversation = {
-                        id: result.history_metadata.conversation_id,
-                        title: result.history_metadata.title,
-                        messages: [userMessage],
-                        date: result.history_metadata.date
-                    }
-                    resultConversation.messages.push(errorChatMsg);
-                }
-                if (!resultConversation) {
-                    setIsLoading(false);
-                    setShowLoadingMessage(false);
-                    abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-                    return;
-                }
-                appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
-                setMessages([...messages, errorChatMsg]);
-            } else {
-                setMessages([...messages, userMessage])
-            }
-        } finally {
-            setIsLoading(false);
-            setShowLoadingMessage(false);
-            abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
-            setProcessMessages(messageStatus.Done)
-        }
-        return abortController.abort();
+    //     } catch (e) {
+    //         if (!abortController.signal.aborted) {
+    //             let errorMessage = `An error occurred. ${errorResponseMessage}`;
+    //             if (result.error?.message) {
+    //                 errorMessage = result.error.message;
+    //             }
+    //             else if (typeof result.error === "string") {
+    //                 errorMessage = result.error;
+    //             }
+    //             let errorChatMsg: ChatMessage = {
+    //                 id: uuid(),
+    //                 role: ERROR,
+    //                 content: errorMessage,
+    //                 date: new Date().toISOString()
+    //             }
+    //             let resultConversation;
+    //             if (conversationId) {
+    //                 resultConversation = appStateContext?.state?.chatHistory?.find((conv) => conv.id === conversationId)
+    //                 if (!resultConversation) {
+    //                     console.error("Conversation not found.");
+    //                     setIsLoading(false);
+    //                     setShowLoadingMessage(false);
+    //                     abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                     return;
+    //                 }
+    //                 resultConversation.messages.push(errorChatMsg);
+    //             } else {
+    //                 if (!result.history_metadata) {
+    //                     console.error("Error retrieving data.", result);
+    //                     let errorChatMsg: ChatMessage = {
+    //                         id: uuid(),
+    //                         role: ERROR,
+    //                         content: errorMessage,
+    //                         date: new Date().toISOString()
+    //                     } 
+    //                     setMessages([...messages, userMessage, errorChatMsg])
+    //                     setIsLoading(false);
+    //                     setShowLoadingMessage(false);
+    //                     abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                     return;
+    //                 }
+    //                 resultConversation = {
+    //                     id: result.history_metadata.conversation_id,
+    //                     title: result.history_metadata.title,
+    //                     messages: [userMessage],
+    //                     date: result.history_metadata.date
+    //                 }
+    //                 resultConversation.messages.push(errorChatMsg);
+    //             }
+    //             if (!resultConversation) {
+    //                 setIsLoading(false);
+    //                 setShowLoadingMessage(false);
+    //                 abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //                 return;
+    //             }
+    //             appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: resultConversation });
+    //             setMessages([...messages, errorChatMsg]);
+    //         } else {
+    //             setMessages([...messages, userMessage])
+    //         }
+    //     } finally {
+    //         setIsLoading(false);
+    //         setShowLoadingMessage(false);
+    //         abortFuncs.current = abortFuncs.current.filter(a => a !== abortController);
+    //         setProcessMessages(messageStatus.Done)
+    //     }
+    //     return abortController.abort();
 
-    }
+    // }
 
     const clearChat = async () => {
         setClearingChat(true)
@@ -777,7 +789,7 @@ const Chat = () => {
                                 placeholder="Type a new question..."
                                 disabled={isLoading}
                                 onSend={(question, id) => {
-                                    appStateContext?.state.isCosmosDBAvailable?.cosmosDB ? makeApiRequestWithCosmosDB(question, id) : makeApiRequestWithoutCosmosDB(question, id)
+                                    makeApiRequestWithoutCosmosDB(question, id)
                                 }}
                                 conversationId={appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined}
                             />
