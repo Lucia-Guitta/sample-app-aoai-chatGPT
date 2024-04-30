@@ -928,6 +928,18 @@ async def create_token():
     # Devolver el token en una respuesta JSON
     return jsonify({"token": jwt_encoded})
 
+@bp.route("/receive_token", methods=["POST"])
+async def receive_token():
+    # Leer el JSON enviado en la solicitud
+    data = await request.get_json()
+
+    # Asegúrate de que el JWT ha sido enviado
+    if not data or 'jwt_encoded' not in data:
+        abort(400, description="No token provided.")
+
+    jwt_encoded = data['jwt_encoded']
+    return jsonify({"token": jwt_encoded})
+
 @bp.route("/auth_details", methods=["POST"])
 async def auth_details():
     # JWT authentication

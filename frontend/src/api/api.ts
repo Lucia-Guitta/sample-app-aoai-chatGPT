@@ -29,7 +29,7 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
 
 export async function getUserInfo(): Promise<UserInfo[]> {
     // Llamada para obtener el token
-    const tokenResponse = await fetch('/create_token', {
+    const tokenResponse = await fetch('/receive_token', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
