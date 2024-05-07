@@ -1,8 +1,12 @@
-import re 
+import re
 
-pattern  = r'\[doc\d+\]'
+import datetime
+import time
 
-def findDocRef(text: str, non_domain_questions: int) -> int:
+pattern = r'\[doc\d+\]'
+
+
+def checkDocRef(text: str, non_domain_questions: int) -> int:
     """
     Find occurrences of '[docN]' in the given text.
 
@@ -12,16 +16,27 @@ def findDocRef(text: str, non_domain_questions: int) -> int:
     Returns:
         int: the number of questions out of the index scope updated
     """
-    pattern  = r'\[doc\d+\]'
-    if not re.findall(pattern,text):
-        non_domain_questions +=1
+    pattern = r'\[doc\d+\]'
+    if not re.findall(pattern, text):
+        return True
     else:
-        non_domain_questions -= 1
+        return False
 
-    return non_domain_questions
 
-def fixResponse(result: dict[str, any]) ->dict[str, any]:
-    pass
+def fixResponse(answer: str) -> str:
+    return answer
+
+
+class DailyDict(dict):
+    def __init__(self):
+        super().__init__()
+        self.last_reset_date = datetime.date.today()
+
+    def reset_if_needed(self):
+        today = datetime.date.today()
+        if today > self.last_reset_date:
+            self.clear()
+            self.last_reset_date = today
 
 
 if __name__ == "__main__":
@@ -37,14 +52,17 @@ y Reportes. Prop360 tiene diferentes flujos de trabajo, como Monooﬁcina o Mult
 flujo de visación dependiendo de los permisos de los usuarios. [doc0][doc1][doc2]
 """
     not_referenced_text = "Hoy hace 17º"
-    
+
     non_domain_questions = 0
     print("Non domain questions", non_domain_questions)
-    non_domain_questions = findDocRef(not_referenced_text, non_domain_questions)
+    non_domain_questions = findDocRef(
+        not_referenced_text, non_domain_questions)
     print("Non domain questions after non referenced text", non_domain_questions)
-    non_domain_questions = findDocRef(not_referenced_text, non_domain_questions)
+    non_domain_questions = findDocRef(
+        not_referenced_text, non_domain_questions)
     print("Non domain questions after 2 non referenced text", non_domain_questions)
     non_domain_questions = findDocRef(referenced_text, non_domain_questions)
     print("Non domain questions", non_domain_questions)
-    non_domain_questions = findDocRef(not_referenced_text, non_domain_questions)
+    non_domain_questions = findDocRef(
+        not_referenced_text, non_domain_questions)
     print("Non domain questions after non referenced text", non_domain_questions)

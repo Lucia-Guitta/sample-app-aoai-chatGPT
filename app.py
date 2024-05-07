@@ -1,3 +1,7 @@
+import datetime
+import secrets
+import string
+import jwt
 import copy
 import json
 import os
@@ -20,7 +24,7 @@ from openai import AsyncAzureOpenAI
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from backend.auth.auth_utils import get_authenticated_user_details, get_authenticated_user_details_jwt
 from backend.history.cosmosdbservice import CosmosConversationClient
-from getIntent import findDocRef
+from getIntent import checkDocRef, DailyDict, fixResponse
 
 from backend.utils import (
     format_as_ndjson,
@@ -32,7 +36,8 @@ from backend.utils import (
     format_pf_non_streaming_response,
 )
 
-bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
+bp = Blueprint("routes", __name__, static_folder="static",
+               template_folder="static")
 
 # Current minimum Azure OpenAI version supported
 MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION = "2024-02-15-preview"
@@ -49,7 +54,8 @@ UI_CHAT_DESCRIPTION = (
     or "This chatbot is configured to answer your questions"
 )
 UI_FAVICON = os.environ.get("UI_FAVICON") or "/favicon.ico"
-UI_SHOW_SHARE_BUTTON = os.environ.get("UI_SHOW_SHARE_BUTTON", "true").lower() == "true"
+UI_SHOW_SHARE_BUTTON = os.environ.get(
+    "UI_SHOW_SHARE_BUTTON", "true").lower() == "true"
 
 
 def create_app():
@@ -61,6 +67,7 @@ def create_app():
 
 @bp.route("/")
 async def index():
+    await non_domain_questions.reset_if_needed()
     return await render_template("index.html", title=UI_TITLE, favicon=UI_FAVICON)
 
 
@@ -110,7 +117,8 @@ AZURE_SEARCH_QUERY_TYPE = os.environ.get("AZURE_SEARCH_QUERY_TYPE")
 AZURE_SEARCH_PERMITTED_GROUPS_COLUMN = os.environ.get(
     "AZURE_SEARCH_PERMITTED_GROUPS_COLUMN"
 )
-AZURE_SEARCH_STRICTNESS = os.environ.get("AZURE_SEARCH_STRICTNESS", SEARCH_STRICTNESS)
+AZURE_SEARCH_STRICTNESS = os.environ.get(
+    "AZURE_SEARCH_STRICTNESS", SEARCH_STRICTNESS)
 
 # AOAI Integration Settings
 AZURE_OPENAI_RESOURCE = os.environ.get("AZURE_OPENAI_RESOURCE")
@@ -133,7 +141,8 @@ AZURE_OPENAI_STREAM = os.environ.get("AZURE_OPENAI_STREAM", "true")
 AZURE_OPENAI_MODEL_NAME = os.environ.get(
     "AZURE_OPENAI_MODEL_NAME", "gpt-35-turbo-16k"
 )  # Name of the model, e.g. 'gpt-35-turbo-16k' or 'gpt-4'
-AZURE_OPENAI_EMBEDDING_ENDPOINT = os.environ.get("AZURE_OPENAI_EMBEDDING_ENDPOINT")
+AZURE_OPENAI_EMBEDDING_ENDPOINT = os.environ.get(
+    "AZURE_OPENAI_EMBEDDING_ENDPOINT")
 AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("AZURE_OPENAI_EMBEDDING_KEY")
 AZURE_OPENAI_EMBEDDING_NAME = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME", "")
 
@@ -147,7 +156,8 @@ AZURE_COSMOSDB_MONGO_VCORE_DATABASE = os.environ.get(
 AZURE_COSMOSDB_MONGO_VCORE_CONTAINER = os.environ.get(
     "AZURE_COSMOSDB_MONGO_VCORE_CONTAINER"
 )
-AZURE_COSMOSDB_MONGO_VCORE_INDEX = os.environ.get("AZURE_COSMOSDB_MONGO_VCORE_INDEX")
+AZURE_COSMOSDB_MONGO_VCORE_INDEX = os.environ.get(
+    "AZURE_COSMOSDB_MONGO_VCORE_INDEX")
 AZURE_COSMOSDB_MONGO_VCORE_TOP_K = os.environ.get(
     "AZURE_COSMOSDB_MONGO_VCORE_TOP_K", AZURE_SEARCH_TOP_K
 )
@@ -200,8 +210,10 @@ ELASTICSEARCH_FILENAME_COLUMN = os.environ.get("ELASTICSEARCH_FILENAME_COLUMN")
 ELASTICSEARCH_TITLE_COLUMN = os.environ.get("ELASTICSEARCH_TITLE_COLUMN")
 ELASTICSEARCH_URL_COLUMN = os.environ.get("ELASTICSEARCH_URL_COLUMN")
 ELASTICSEARCH_VECTOR_COLUMNS = os.environ.get("ELASTICSEARCH_VECTOR_COLUMNS")
-ELASTICSEARCH_STRICTNESS = os.environ.get("ELASTICSEARCH_STRICTNESS", SEARCH_STRICTNESS)
-ELASTICSEARCH_EMBEDDING_MODEL_ID = os.environ.get("ELASTICSEARCH_EMBEDDING_MODEL_ID")
+ELASTICSEARCH_STRICTNESS = os.environ.get(
+    "ELASTICSEARCH_STRICTNESS", SEARCH_STRICTNESS)
+ELASTICSEARCH_EMBEDDING_MODEL_ID = os.environ.get(
+    "ELASTICSEARCH_EMBEDDING_MODEL_ID")
 
 # Pinecone Integration Settings
 PINECONE_ENVIRONMENT = os.environ.get("PINECONE_ENVIRONMENT")
@@ -225,11 +237,13 @@ AZURE_ML_PROJECT_RESOURCE_ID = os.environ.get(
     "AZURE_ML_PROJECT_RESOURCE_ID"
 )  # /subscriptions/{sub ID}/resourceGroups/{rg name}/providers/Microsoft.MachineLearningServices/workspaces/{AML project name}
 AZURE_MLINDEX_TOP_K = os.environ.get("AZURE_MLINDEX_TOP_K", SEARCH_TOP_K)
-AZURE_MLINDEX_STRICTNESS = os.environ.get("AZURE_MLINDEX_STRICTNESS", SEARCH_STRICTNESS)
+AZURE_MLINDEX_STRICTNESS = os.environ.get(
+    "AZURE_MLINDEX_STRICTNESS", SEARCH_STRICTNESS)
 AZURE_MLINDEX_ENABLE_IN_DOMAIN = os.environ.get(
     "AZURE_MLINDEX_ENABLE_IN_DOMAIN", SEARCH_ENABLE_IN_DOMAIN
 )
-AZURE_MLINDEX_CONTENT_COLUMNS = os.environ.get("AZURE_MLINDEX_CONTENT_COLUMNS", "")
+AZURE_MLINDEX_CONTENT_COLUMNS = os.environ.get(
+    "AZURE_MLINDEX_CONTENT_COLUMNS", "")
 AZURE_MLINDEX_FILENAME_COLUMN = os.environ.get("AZURE_MLINDEX_FILENAME_COLUMN")
 AZURE_MLINDEX_TITLE_COLUMN = os.environ.get("AZURE_MLINDEX_TITLE_COLUMN")
 AZURE_MLINDEX_URL_COLUMN = os.environ.get("AZURE_MLINDEX_URL_COLUMN")
@@ -239,9 +253,11 @@ AZURE_MLINDEX_QUERY_TYPE = os.environ.get("AZURE_MLINDEX_QUERY_TYPE")
 USE_PROMPTFLOW = os.environ.get("USE_PROMPTFLOW", "false").lower() == "true"
 PROMPTFLOW_ENDPOINT = os.environ.get("PROMPTFLOW_ENDPOINT")
 PROMPTFLOW_API_KEY = os.environ.get("PROMPTFLOW_API_KEY")
-PROMPTFLOW_RESPONSE_TIMEOUT = os.environ.get("PROMPTFLOW_RESPONSE_TIMEOUT", 30.0)
+PROMPTFLOW_RESPONSE_TIMEOUT = os.environ.get(
+    "PROMPTFLOW_RESPONSE_TIMEOUT", 30.0)
 # default request and response field names are input -> 'query' and output -> 'reply'
-PROMPTFLOW_REQUEST_FIELD_NAME = os.environ.get("PROMPTFLOW_REQUEST_FIELD_NAME", "query")
+PROMPTFLOW_REQUEST_FIELD_NAME = os.environ.get(
+    "PROMPTFLOW_REQUEST_FIELD_NAME", "query")
 PROMPTFLOW_RESPONSE_FIELD_NAME = os.environ.get(
     "PROMPTFLOW_RESPONSE_FIELD_NAME", "reply"
 )
@@ -411,7 +427,8 @@ def get_configured_data_source():
         userToken = None
         if AZURE_SEARCH_PERMITTED_GROUPS_COLUMN:
             userToken = request.headers.get("X-MS-TOKEN-AAD-ACCESS-TOKEN", "")
-            logging.debug(f"USER TOKEN is {'present' if userToken else 'not present'}")
+            logging.debug(
+                f"USER TOKEN is {'present' if userToken else 'not present'}")
             if not userToken:
                 raise Exception(
                     "Document-level access control is enabled, but user access token could not be fetched."
@@ -461,7 +478,8 @@ def get_configured_data_source():
                     True if AZURE_SEARCH_ENABLE_IN_DOMAIN.lower() == "true" else False
                 ),
                 "top_n_documents": (
-                    int(AZURE_SEARCH_TOP_K) if AZURE_SEARCH_TOP_K else int(SEARCH_TOP_K)
+                    int(AZURE_SEARCH_TOP_K) if AZURE_SEARCH_TOP_K else int(
+                        SEARCH_TOP_K)
                 ),
                 "query_type": query_type,
                 "semantic_configuration": (
@@ -493,7 +511,8 @@ def get_configured_data_source():
                 "container_name": AZURE_COSMOSDB_MONGO_VCORE_CONTAINER,
                 "fields_mapping": {
                     "content_fields": (
-                        parse_multi_columns(AZURE_COSMOSDB_MONGO_VCORE_CONTENT_COLUMNS)
+                        parse_multi_columns(
+                            AZURE_COSMOSDB_MONGO_VCORE_CONTENT_COLUMNS)
                         if AZURE_COSMOSDB_MONGO_VCORE_CONTENT_COLUMNS
                         else []
                     ),
@@ -513,7 +532,8 @@ def get_configured_data_source():
                         else None
                     ),
                     "vector_fields": (
-                        parse_multi_columns(AZURE_COSMOSDB_MONGO_VCORE_VECTOR_COLUMNS)
+                        parse_multi_columns(
+                            AZURE_COSMOSDB_MONGO_VCORE_VECTOR_COLUMNS)
                         if AZURE_COSMOSDB_MONGO_VCORE_VECTOR_COLUMNS
                         else []
                     ),
@@ -730,7 +750,8 @@ def prepare_model_args(request_body):
 
     for message in request_messages:
         if message:
-            messages.append({"role": message["role"], "content": message["content"]})
+            messages.append(
+                {"role": message["role"], "content": message["content"]})
 
     model_args = {
         "messages": messages,
@@ -747,7 +768,8 @@ def prepare_model_args(request_body):
     }
 
     if SHOULD_USE_DATA:
-        model_args["extra_body"] = {"data_sources": [get_configured_data_source()]}
+        model_args["extra_body"] = {
+            "data_sources": [get_configured_data_source()]}
 
     model_args_clean = copy.deepcopy(model_args)
     if model_args_clean.get("extra_body"):
@@ -818,11 +840,13 @@ async def promptflow_request(request):
         resp["id"] = request["messages"][-1]["id"]
         return resp
     except Exception as e:
-        logging.error(f"An error occurred while making promptflow_request: {e}")
+        logging.error(
+            f"An error occurred while making promptflow_request: {e}")
 
 
 async def send_chat_request(request):
-    filtered_messages = [message for message in request['messages'] if message['role'] != 'tool']
+    filtered_messages = [
+        message for message in request['messages'] if message['role'] != 'tool']
     request['messages'] = filtered_messages
     model_args = prepare_model_args(request)
 
@@ -860,7 +884,8 @@ async def stream_chat_request(request_body):
 
     return generate()
 
-non_domain_questions = dict()
+non_domain_questions = DailyDict()
+
 async def conversation_internal(request_body):
     try:
         if SHOULD_STREAM:
@@ -871,12 +896,13 @@ async def conversation_internal(request_body):
             return response
         else:
             result = await complete_chat_request(request_body)
+            answer_str = result["choices"][-1]["messages"][-1]["content"]
             global non_domain_questions
             if request_body["userId"] not in non_domain_questions.keys():
                 non_domain_questions[request_body["userId"]] = 0
-            non_domain_questions[request_body["userId"]] = findDocRef(result["choices"][-1]["messages"][-1]["content"],
-                                                                      non_domain_questions[request_body["userId"]]
-                                                                      )
+            if (checkDocRef(answer_str)):
+                non_domain_questions[request_body["userId"]] += 1
+                result["choices"][-1]["messages"][-1]["content"] = fixResponse()
             if non_domain_questions[request_body["userId"]] >= 5:
                 result["choices"][-1]["messages"][-1]["content"] = "Por favor, pregunta algo relacionado con el sistema de Prop360"
             answer = jsonify(result)
@@ -889,10 +915,6 @@ async def conversation_internal(request_body):
         else:
             return jsonify({"error": str(ex)}), 500
 
-import jwt
-import string
-import secrets
-import datetime
 
 def generate_secret_key(length=64):
     """Generate a cryptographically secure secret key."""
@@ -919,17 +941,20 @@ def create_jwt(user_id="071095", user_name="Lu", secret_key=None, expiration_min
     payload = {
         'sub': user_id,
         'name': user_name,
-        'iat': datetime.datetime.utcnow(),  # Issued At: Time when the JWT was issued.
+        # Issued At: Time when the JWT was issued.
+        'iat': datetime.datetime.utcnow(),
     }
 
     # Add an expiration time if specified
     if expiration_minutes:
-        payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
-    
+        payload['exp'] = datetime.datetime.utcnow(
+        ) + datetime.timedelta(minutes=expiration_minutes)
+
     secret_key = generate_secret_key()
 
     encoded_jwt = jwt.encode(payload, secret_key, algorithm="HS256")
     return encoded_jwt
+
 
 @bp.route("/create_token", methods=["POST"])
 async def create_token():
@@ -939,13 +964,17 @@ async def create_token():
     return jsonify({"token": jwt_encoded})
 
 user_count = 0
+
+
 @bp.route("/auth_details", methods=["POST"])
 async def auth_details():
     # JWT authentication
     global user_count
-    user_count +=1
-    authenticated_user = get_authenticated_user_details_jwt(request_headers=request.headers)
-    authenticated_user["user_id"] = str(int(authenticated_user["user_id"])+user_count)
+    user_count += 1
+    authenticated_user = get_authenticated_user_details_jwt(
+        request_headers=request.headers)
+    authenticated_user["user_id"] = str(
+        int(authenticated_user["user_id"])+user_count)
     if "status" in authenticated_user and authenticated_user["status"] == "error":
         # Si hay un error en la autenticación, retorna un mensaje de error
         abort(401, description=authenticated_user["message"])
@@ -974,10 +1003,11 @@ def get_frontend_settings():
 ## Conversation History API ##
 @bp.route("/history/generate", methods=["POST"])
 async def add_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
@@ -998,8 +1028,8 @@ async def add_conversation():
             history_metadata["title"] = title
             history_metadata["date"] = conversation_dict["createdAt"]
 
-        ## Format the incoming message object in the "chat/completions" messages format
-        ## then write it to the conversation history in cosmos
+        # Format the incoming message object in the "chat/completions" messages format
+        # then write it to the conversation history in cosmos
         messages = request_json["messages"]
         if len(messages) > 0 and messages[-1]["role"] == "user":
             createdMessageValue = await cosmos_conversation_client.create_message(
@@ -1032,10 +1062,11 @@ async def add_conversation():
 
 @bp.route("/history/update", methods=["POST"])
 async def update_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
@@ -1049,8 +1080,8 @@ async def update_conversation():
         if not conversation_id:
             raise Exception("No conversation_id found")
 
-        ## Format the incoming message object in the "chat/completions" messages format
-        ## then write it to the conversation history in cosmos
+        # Format the incoming message object in the "chat/completions" messages format
+        # then write it to the conversation history in cosmos
         messages = request_json["messages"]
         if len(messages) > 0 and messages[-1]["role"] == "assistant":
             if len(messages) > 1 and messages[-2].get("role", None) == "tool":
@@ -1083,11 +1114,12 @@ async def update_conversation():
 
 @bp.route("/history/message_feedback", methods=["POST"])
 async def update_message():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
     cosmos_conversation_client = init_cosmosdb_client()
 
-    ## check request for message_id
+    # check request for message_id
     request_json = await request.get_json()
     message_id = request_json.get("message_id", None)
     message_feedback = request_json.get("message_feedback", None)
@@ -1098,7 +1130,7 @@ async def update_message():
         if not message_feedback:
             return jsonify({"error": "message_feedback is required"}), 400
 
-        ## update the message in cosmos
+        # update the message in cosmos
         updated_message = await cosmos_conversation_client.update_message_feedback(
             user_id, message_id, message_feedback
         )
@@ -1129,11 +1161,12 @@ async def update_message():
 
 @bp.route("/history/delete", methods=["DELETE"])
 async def delete_conversation():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    # get the user id from the request headers
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
@@ -1141,17 +1174,17 @@ async def delete_conversation():
         if not conversation_id:
             return jsonify({"error": "conversation_id is required"}), 400
 
-        ## make sure cosmos is configured
+        # make sure cosmos is configured
         cosmos_conversation_client = init_cosmosdb_client()
         if not cosmos_conversation_client:
             raise Exception("CosmosDB is not configured or not working")
 
-        ## delete the conversation messages from cosmos first
+        # delete the conversation messages from cosmos first
         deleted_messages = await cosmos_conversation_client.delete_messages(
             conversation_id, user_id
         )
 
-        ## Now delete the conversation
+        # Now delete the conversation
         deleted_conversation = await cosmos_conversation_client.delete_conversation(
             user_id, conversation_id
         )
@@ -1175,15 +1208,16 @@ async def delete_conversation():
 @bp.route("/history/list", methods=["GET"])
 async def list_conversations():
     offset = request.args.get("offset", 0)
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## make sure cosmos is configured
+    # make sure cosmos is configured
     cosmos_conversation_client = init_cosmosdb_client()
     if not cosmos_conversation_client:
         raise Exception("CosmosDB is not configured or not working")
 
-    ## get the conversations from cosmos
+    # get the conversations from cosmos
     conversations = await cosmos_conversation_client.get_conversations(
         user_id, offset=offset, limit=25
     )
@@ -1191,33 +1225,34 @@ async def list_conversations():
     if not isinstance(conversations, list):
         return jsonify({"error": f"No conversations for {user_id} were found"}), 404
 
-    ## return the conversation ids
+    # return the conversation ids
 
     return jsonify(conversations), 200
 
 
 @bp.route("/history/read", methods=["POST"])
 async def get_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
     if not conversation_id:
         return jsonify({"error": "conversation_id is required"}), 400
 
-    ## make sure cosmos is configured
+    # make sure cosmos is configured
     cosmos_conversation_client = init_cosmosdb_client()
     if not cosmos_conversation_client:
         raise Exception("CosmosDB is not configured or not working")
 
-    ## get the conversation object and the related messages from cosmos
+    # get the conversation object and the related messages from cosmos
     conversation = await cosmos_conversation_client.get_conversation(
         user_id, conversation_id
     )
-    ## return the conversation id and the messages in the bot frontend format
+    # return the conversation id and the messages in the bot frontend format
     if not conversation:
         return (
             jsonify(
@@ -1233,7 +1268,7 @@ async def get_conversation():
         user_id, conversation_id
     )
 
-    ## format the messages in the bot frontend format
+    # format the messages in the bot frontend format
     messages = [
         {
             "id": msg["id"],
@@ -1251,22 +1286,23 @@ async def get_conversation():
 
 @bp.route("/history/rename", methods=["POST"])
 async def rename_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
     if not conversation_id:
         return jsonify({"error": "conversation_id is required"}), 400
 
-    ## make sure cosmos is configured
+    # make sure cosmos is configured
     cosmos_conversation_client = init_cosmosdb_client()
     if not cosmos_conversation_client:
         raise Exception("CosmosDB is not configured or not working")
 
-    ## get the conversation from cosmos
+    # get the conversation from cosmos
     conversation = await cosmos_conversation_client.get_conversation(
         user_id, conversation_id
     )
@@ -1280,7 +1316,7 @@ async def rename_conversation():
             404,
         )
 
-    ## update the title
+    # update the title
     title = request_json.get("title", None)
     if not title:
         return jsonify({"error": "title is required"}), 400
@@ -1295,13 +1331,14 @@ async def rename_conversation():
 
 @bp.route("/history/delete_all", methods=["DELETE"])
 async def delete_all_conversations():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    # get the user id from the request headers
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
     # get conversations for user
     try:
-        ## make sure cosmos is configured
+        # make sure cosmos is configured
         cosmos_conversation_client = init_cosmosdb_client()
         if not cosmos_conversation_client:
             raise Exception("CosmosDB is not configured or not working")
@@ -1314,12 +1351,12 @@ async def delete_all_conversations():
 
         # delete each conversation
         for conversation in conversations:
-            ## delete the conversation messages from cosmos first
+            # delete the conversation messages from cosmos first
             deleted_messages = await cosmos_conversation_client.delete_messages(
                 conversation["id"], user_id
             )
 
-            ## Now delete the conversation
+            # Now delete the conversation
             deleted_conversation = await cosmos_conversation_client.delete_conversation(
                 user_id, conversation["id"]
             )
@@ -1340,11 +1377,12 @@ async def delete_all_conversations():
 
 @bp.route("/history/clear", methods=["POST"])
 async def clear_messages():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+    # get the user id from the request headers
+    authenticated_user = get_authenticated_user_details(
+        request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
-    ## check request for conversation_id
+    # check request for conversation_id
     request_json = await request.get_json()
     conversation_id = request_json.get("conversation_id", None)
 
@@ -1352,12 +1390,12 @@ async def clear_messages():
         if not conversation_id:
             return jsonify({"error": "conversation_id is required"}), 400
 
-        ## make sure cosmos is configured
+        # make sure cosmos is configured
         cosmos_conversation_client = init_cosmosdb_client()
         if not cosmos_conversation_client:
             raise Exception("CosmosDB is not configured or not working")
 
-        ## delete the conversation messages from cosmos
+        # delete the conversation messages from cosmos
         deleted_messages = await cosmos_conversation_client.delete_messages(
             conversation_id, user_id
         )
@@ -1419,7 +1457,7 @@ async def ensure_cosmos():
 
 
 async def generate_title(conversation_messages):
-    ## make sure the messages are sorted by _ts descending
+    # make sure the messages are sorted by _ts descending
     title_prompt = 'Summarize the conversation so far into a 4-word or less title. Do not use any quotation marks or punctuation. Respond with a json object in the format {{"title": string}}. Do not include any other commentary or description.'
 
     messages = [
